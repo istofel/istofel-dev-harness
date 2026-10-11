@@ -1,1 +1,20 @@
-
+{
+  "name": "istofel-dev",
+  "version": "1.0.0",
+  "description": "Do planejamento à execução verificada: istofel-project-plan (MVP → PRD → SPEC → CLAUDE.md) + istofel-harness (contrato executável com travas, verificação obrigatória, escalação e revisor independente).",
+  "author": {
+    "name": "Vinícius Istofel Oliveira"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "planning",
+    "prd",
+    "spec",
+    "harness",
+    "hooks",
+    "verification",
+    "agents"
+  ],
+  "repository": "https://github.com/istofel/istofel-dev-harness",
+  "homepage": "https://github.com/istofel/istofel-dev-harness"
+}
