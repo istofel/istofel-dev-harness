@@ -1,1 +1,14 @@
-
+{
+  "name": "istofel",
+  "owner": {
+    "name": "Vinícius Istofel Oliveira"
+  },
+  "description": "Plugins de Vinícius Istofel para Claude Code: planejamento de produto e harness executável para agentes de codificação.",
+  "plugins": [
+    {
+      "name": "istofel-dev",
+      "source": "./plugins/istofel-dev",
+      "description": "Planejamento (MVP → PRD → SPEC → CLAUDE.md) + harness executável para agentes de codificação."
+    }
+  ]
+}
