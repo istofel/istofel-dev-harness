@@ -1,0 +1,302 @@
+---
+name: istofel-project-plan
+description: >
+  Guia profissional para criação de documentação completa de produto digital: MVP Scope, PRD e SPEC.
+  Use este skill sempre que o usuário quiser definir, planejar ou documentar um produto digital,
+  ideia de startup, feature ou sistema — mesmo que mencione apenas "quero criar um produto",
+  "me ajuda a planejar isso", "preciso de um PRD", "quero escrever uma spec", "tenho uma ideia
+  de app", "como estruturo isso", "me ajuda a pensar no escopo", ou qualquer variação.
+  Aplique também quando o usuário apresentar um prompt de produto e pedir refinamento, análise
+  crítica ou expansão. Este skill produz documentos técnicos profissionais com análise de mercado,
+  decisões de stack, modelagem de dados, regras de negócio, roadmap, user flows, especificação
+  por módulo e diagramas de sequência. Sempre gera um documento por vez, solicitando aprovação
+  antes de avançar para o próximo: MVP Scope → PRD → SPEC → CLAUDE.md → (opcional) HARNESS
+  executável via skill istofel-harness do plugin istofel-dev.
+---
+
+# istofel_project_plan
+
+Skill profissional para geração de documentação técnica e estratégica de produto digital.
+
+Produz quatro documentos em sequência obrigatória:
+1. **MVP Scope** — visão geral técnica e estratégica
+2. **PRD** — requisitos detalhados de produto
+3. **SPEC** — especificação técnica de implementação
+4. **CLAUDE.md** — contexto de sessão personalizado para o agente de IA
+
+**Regra de ouro:** Gerar um documento por vez. Ao finalizar cada um, perguntar explicitamente se o usuário deseja prosseguir para o próximo. Nunca pular etapas.
+
+---
+
+## Princípios Gerais
+
+Aplicar em todos os documentos:
+
+- **Pragmatismo de MVP**: velocidade, simplicidade, baixo custo, risco controlado
+- **Zero overengineering**: soluções consolidadas, bibliotecas maduras, padrões validados
+- **Premissas explícitas**: marcar como `**Premissa**` toda suposição
+- **Dados com fonte**: incluir fonte, ano e região; se não existir, indicar `**estimativa**`
+- **Perguntas antes do documento**: se houver ambiguidade estrutural, perguntar antes de gerar
+- **Sugestão proativa**: identificar e sinalizar pontos omitidos que impactam o produto, marcando com `> 💡 **Sugestão:** [texto]`
+
+---
+
+## Fluxo de Execução
+
+```
+1.  Receber ideia/prompt do usuário
+2.  Analisar lacunas críticas → perguntar APENAS o essencial (máx. 5 perguntas)
+3.  Gerar MVP Scope completo
+4.  → Oferecer download do MVP Scope como arquivo .md
+5.  → "Deseja prosseguir para o PRD?"
+6.  Gerar PRD completo
+7.  → Oferecer download do PRD como arquivo .md
+8.  → "Deseja prosseguir para a SPEC?"
+9.  Gerar SPEC completo
+10. → Oferecer download da SPEC como arquivo .md
+11. → "Deseja prosseguir para o CLAUDE.md?"
+12. Gerar CLAUDE.md personalizado com dados extraídos dos documentos anteriores
+13. → Oferecer download do CLAUDE.md
+14. → "Deseja configurar o harness de execução (contrato executável com travas)?"
+15. Se sim: Etapa 5 — acionar a skill istofel-harness
+16. → Informar que o processo está completo
+```
+
+---
+
+## Gatilho de Perguntas
+
+Antes de gerar qualquer documento, verificar se faltam informações críticas:
+
+| Área | Perguntar se ausente |
+|------|----------------------|
+| Público-alvo | Quem usa? Contexto profissional/demográfico? |
+| Problema central | Qual dor específica resolve? |
+| Modelo de negócio | Como monetiza? B2B, B2C, freemium, SaaS? |
+| Distribuição | Web, mobile, desktop, CLI, API? |
+| Restrições técnicas | Linguagem preferida, infra existente, tamanho do time? |
+
+Formular no máximo 5 perguntas, agrupadas. Não perguntar o que pode ser inferido com segurança.
+
+---
+
+## Regras de Sugestão Proativa
+
+Sempre que o usuário não mencionar os itens abaixo, sinalizar no documento:
+
+| Item omitido | Ação |
+|--------------|------|
+| Estratégia de retenção | Sugerir mecanismos de engajamento |
+| Segurança de dados / privacidade | Sugerir LGPD/GDPR se produto brasileiro/europeu |
+| Observabilidade | Sugerir logging, error tracking, métricas |
+| Internacionalização | Perguntar se é relevante |
+| Acessibilidade | Mencionar WCAG se produto público |
+| Testes | Sugerir estratégia mínima |
+| Licença | Mencionar necessidade de definição |
+| Rollback/fallback | Sinalizar se há dependências críticas de terceiros |
+
+---
+
+## Verificação Cruzada Entre Documentos
+
+Cada documento é gerado a partir dos anteriores. Antes de entregar qualquer documento a partir do
+segundo, verificar se ele contradiz algum já aprovado. Contradições silenciosas propagam erro até
+a implementação.
+
+O que verificar, por etapa:
+
+| Ao gerar | Verificar contra | Contradições típicas |
+|----------|------------------|----------------------|
+| PRD | MVP Scope | Feature marcada como MVP no PRD mas listada como "Futuro" no roadmap; persona diferente da definida; monetização divergente |
+| SPEC | MVP Scope + PRD | Stack diferente da recomendada no MVP Scope; endpoint que viola regra de autorização do PRD; entidade no schema que não existe no modelo de dados; passo de build que implementa feature fora de escopo |
+| CLAUDE.md | SPEC + PRD | Comando que não existe na SPEC; invariante reescrita em vez de copiada; stack divergente dos ADRs; proibição sem origem em ADR ou INV |
+
+Se encontrar contradição:
+1. **Não resolver silenciosamente.** Apontar ao usuário antes de entregar o documento.
+2. Indicar os dois pontos em conflito, citando o documento e a seção de cada um.
+3. Perguntar qual prevalece.
+4. Só então gerar o documento com a decisão aplicada.
+
+Formato ao sinalizar:
+
+```
+⚠️ Contradição detectada
+  MVP Scope §3: stack recomendada é [X]
+  Sua instrução atual: usar [Y]
+  Qual prevalece?
+```
+
+> Se nenhuma contradição for encontrada, não mencionar a verificação — apenas entregar o documento.
+
+---
+
+## Racionalizações — Desculpas e Refutações
+
+O agente tende a pular etapas ou reduzir qualidade quando encontra atrito. Toda vez que uma das
+racionalizações abaixo surgir internamente, aplicar a refutação e prosseguir com o processo completo.
+
+| Racionalização | Refutação |
+|----------------|-----------|
+| "O usuário já sabe disso, posso resumir esta seção" | O documento será lido por um agente sem contexto, não pelo usuário. Escrever completo. |
+| "Não tenho dados de mercado confiáveis, vou pular a seção" | Marcar como `**estimativa**` é obrigatório. Omitir a seção não é opção. |
+| "Vou gerar os três documentos de uma vez para agilizar" | Cada gate existe para o usuário corrigir antes do erro propagar. Um por vez, sempre. |
+| "O usuário não respondeu tudo, vou inventar o resto" | Declarar `**Premissa**` explicitamente. Nunca apresentar suposição como fato. |
+| "Este produto é simples, não precisa de invariantes" | Se há entidade com estado, há invariante. Se não há, omitir a seção — nunca inventar uma trivial. |
+| "A sequência de build é óbvia, posso ser genérico" | O agente que implementa não tem o contexto desta conversa. Passos concretos ou nada. |
+| "Já cobri isso em outro documento, não repito" | Referenciar é correto; omitir informação acionável não é. Verificar se o leitor daquele documento tem acesso. |
+| "O usuário aprovou rápido, deve estar tudo certo" | Aprovação rápida não valida qualidade. O checklist do documento ainda precisa passar. |
+| "Vou pular as perguntas para não incomodar" | Perguntar 3 coisas custa 30 segundos. Documento errado custa o projeto inteiro. |
+| "Design tokens/comandos eu deduzo da stack" | Deduzir gera valores inventados. Se o usuário não definiu, perguntar ou marcar como pendente. |
+
+---
+
+## Red Flags
+
+Sinais de que o documento gerado tem problema. Se qualquer um aparecer, revisar antes de entregar:
+
+- Uma seção inteira preenchida com placeholders genéricos que serviriam para qualquer produto
+- Nenhuma premissa marcada em um projeto com informação incompleta
+- Regras de negócio sem tipo declarado (Validação / Invariante / Transição / Autorização)
+- Sequência de build com passos que levariam mais de uma sessão para completar
+- Checkpoint de build que não pode ser verificado objetivamente ("está funcionando bem")
+- Dados de mercado sem fonte nem marcação de estimativa
+- Decisão técnica no PRD, ou regra de negócio inventada na SPEC
+- CLAUDE.md com mais de 250 palavras ou com informação não extraída dos documentos
+
+---
+
+## Entrega de Arquivos .md
+
+Ao finalizar cada documento, além de exibir o conteúdo na conversa, oferecer o download
+do documento como arquivo Markdown. Seguir este comportamento:
+
+**Se a ferramenta `create_file` + `present_files` estiver disponível (Claude com computer use):**
+- Salvar o conteúdo gerado em `/mnt/user-data/outputs/[nome-do-documento].md`
+  - MVP Scope → `mvp-scope.md`
+  - PRD → `prd.md`
+  - SPEC → `spec.md`
+  - CLAUDE.md → `CLAUDE.md`
+- Chamar `present_files` com o caminho do arquivo para disponibilizar o download ao usuário
+
+**Se estiver no Claude Code (plugin istofel-dev, dentro de um repositório):**
+- Salvar `mvp-scope.md`, `prd.md` e `spec.md` em `docs/` e o `CLAUDE.md` na raiz do projeto
+- Não usar `/mnt/user-data/outputs` nem `present_files`
+
+**Se `create_file` + `present_files` NÃO estiver disponível (Claude.ai padrão):**
+- Informar ao usuário que o download direto não está disponível no ambiente atual
+- Orientar a copiar o conteúdo do bloco Markdown exibido na conversa e salvar manualmente como `.md`
+
+A oferta de download deve aparecer ANTES da pergunta de continuação para a próxima etapa,
+na seguinte ordem ao finalizar cada documento:
+
+```
+[conteúdo do documento gerado]
+
+📄 O documento está disponível para download acima (ou copie o conteúdo acima e salve como .md).
+
+Deseja prosseguir para o [próximo documento]?
+```
+
+---
+
+## Etapa 1 — MVP Scope
+
+Consulte `/references/mvp-scope.md` para estrutura completa.
+
+Ao finalizar:
+1. Oferecer download como `mvp-scope.md`
+2. Perguntar — *"Deseja prosseguir para o PRD?"*
+
+---
+
+## Etapa 2 — PRD
+
+> Gerar apenas após aprovação explícita do MVP Scope.
+
+Consulte `/references/prd.md` para estrutura completa.
+
+Ao finalizar:
+1. Oferecer download como `prd.md`
+2. Perguntar — *"Deseja prosseguir para a SPEC?"*
+
+---
+
+## Etapa 3 — SPEC
+
+> Gerar apenas após aprovação explícita do PRD.
+
+Consulte `/references/spec.md` para estrutura completa.
+
+Ao finalizar:
+1. Oferecer download como `spec.md`
+2. Perguntar — *"Deseja prosseguir para o CLAUDE.md?"*
+
+---
+
+## Etapa 4 — CLAUDE.md
+
+> Gerar apenas após aprovação explícita da SPEC.
+> Não fazer perguntas ao usuário — todas as informações necessárias já foram coletadas nas etapas anteriores.
+
+Consulte `/references/claude-md.md` para estrutura completa.
+
+O CLAUDE.md é gerado automaticamente a partir dos dados dos três documentos anteriores:
+
+| Seção do CLAUDE.md | Fonte |
+|--------------------|-------|
+| Projeto e stack | MVP Scope — seção de stack tecnológica |
+| Comandos de desenvolvimento | SPEC — seção de comandos de desenvolvimento |
+| Padrões de código | SPEC — convenções globais |
+| ADRs fechados | SPEC — seção de ADRs |
+| Estrutura de diretórios | SPEC — seção de estrutura do projeto |
+| Design tokens | SPEC — seção de design tokens (omitir se sem UI) |
+| Invariantes críticas | SPEC — seção de máquinas de estado e invariantes |
+| Regras de autorização | PRD — regras tipadas como Autorização |
+| Sequência de build | SPEC — seção de sequência de build |
+| Variáveis de ambiente | SPEC — seção de constantes globais |
+| Casos extremos | PRD — seção de edge cases e fora de escopo |
+| Glossário | PRD — glossário |
+
+**Incluir apenas o que for diretamente acionável pelo agente.** Não duplicar conteúdo dos documentos de origem — referenciar quando necessário.
+
+**Seção fixa de execução.** Além das seções extraídas dos documentos, todo CLAUDE.md gerado inclui
+esta seção literal — ela corrige falhas de comportamento comuns em agentes de código e não depende
+do projeto:
+
+```
+## Execução
+- Toque apenas no que o pedido exige — não refatore, reformate nem "melhore" código adjacente
+- Remova só os órfãos que suas mudanças criaram; código morto pré-existente, apenas mencione
+- Ambiguidade: declare o que está confuso e pergunte antes de implementar
+- Interpretações múltiplas: apresente-as, não escolha em silêncio
+- Combine com o estilo existente do arquivo, mesmo que você faria diferente
+```
+
+Ao finalizar:
+1. Oferecer download como `CLAUDE.md`
+2. Perguntar: "Deseja configurar o harness de execução?" (Etapa 5)
+3. Informar que o processo de documentação está completo:
+   *"Documentação completa: mvp-scope.md · prd.md · spec.md · CLAUDE.md"*
+
+---
+
+## Etapa 5 — Harness de Execução (opcional)
+
+> Só no Claude Code com o plugin istofel-dev. Fora dele, entregar apenas a recomendação.
+
+Transforma o planejamento em contrato executável. Acionar a skill `istofel-harness` (modo Configurar)
+passando, já extraídos dos documentos aprovados — sem perguntar de novo o que já foi respondido:
+
+| Insumo do harness | Fonte |
+|-------------------|-------|
+| Entrega da fase atual | SPEC — sequência de build (primeiro checkpoint não concluído) |
+| Critérios de aceitação | PRD — critérios de aceitação globais + da feature em foco |
+| Comandos de verificação | SPEC — comandos de desenvolvimento e estratégia de testes |
+| Limites e proibições | PRD — fora de escopo; SPEC — invariantes e ADRs |
+| Mapa do projeto | SPEC — estrutura de diretórios |
+
+Regras:
+- Cada critério de aceitação deve virar um teste ou comando verificável; critério subjetivo é Red Flag
+- O CLAUDE.md recebe `@HARNESS.md` automaticamente — não duplicar regras de verificação nele
+- Os números de escalação no HARNESS.md devem ser idênticos aos do `.harness/config.json`
+
