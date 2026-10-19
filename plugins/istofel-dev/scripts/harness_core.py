@@ -27,7 +27,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 HARNESS_DIR = ".harness"
 CONFIG_FILE = "config.json"
 BASELINE_FILE = "baseline.json"
@@ -51,7 +51,16 @@ DEFAULT_CONFIG = {
         "Pipfile", "Pipfile.lock",
     ],
     "allow_writes_outside_project": False,
+    "lessons": {"enabled": True, "file": "docs/lessons.md", "inject_last": 5},
 }
+
+LESSON_PENDING = "(pendente)"
+LESSONS_HEADER = (
+    "# Lições\n\n"
+    "Registradas pelo istofel-harness quando uma verificação falhou e depois passou.\n"
+    "A evidência é escrita pelo hook; a lição, pelo agente. Lições que se repetem devem\n"
+    "virar uma linha em `NUNCA` ou `Regras Não Óbvias` do CLAUDE.md.\n\n"
+)
 
 IGNORED_DIRS = {
     ".git", "node_modules", ".venv", "venv", "env", "__pycache__", ".next", "dist", "build",
@@ -207,6 +216,10 @@ def load_config(root: Path) -> dict:
         if not isinstance(item, dict) or not item.get("cmd"):
             raise ConfigError("cada item de 'verify' precisa de {\"name\", \"cmd\"}")
         item.setdefault("name", item["cmd"])
+    les = dict(DEFAULT_CONFIG["lessons"])
+    if isinstance(data.get("lessons"), dict):
+        les.update(data["lessons"])
+    cfg["lessons"] = les
     for k in ("max_attempts", "escalate_after_same_error", "verify_timeout_seconds"):
         if not isinstance(cfg[k], int) or cfg[k] < 1:
             raise ConfigError(f"'{k}' deve ser inteiro >= 1")
@@ -227,6 +240,8 @@ def load_state(root: Path) -> dict:
     st.setdefault("escalated", False)
     st.setdefault("escalation_notified", False)
     st.setdefault("last_result", None)
+    st.setdefault("lesson_requested", False)
+    st.setdefault("fail_log", None)
     return st
 
 
@@ -297,6 +312,11 @@ def list_test_files(root: Path, test_paths: list[str]) -> list[str]:
 
 def fingerprint(root: Path) -> str:
     h = hashlib.sha256()
+    skip = set()
+    try:
+        skip.add(lessons_rel(load_config(root)) or "")
+    except Exception:
+        pass
     if _is_git(root):
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True,
                               text=True, timeout=10).stdout.strip()
@@ -315,7 +335,7 @@ def fingerprint(root: Path) -> str:
                 skip_next = True
             paths.add(path)
         for path in sorted(paths):
-            if path.startswith(HARNESS_DIR + "/" + STATE_DIR):
+            if path.startswith(HARNESS_DIR + "/" + STATE_DIR) or path in skip:
                 continue
             fp = root / path
             if fp.is_file():
@@ -324,12 +344,73 @@ def fingerprint(root: Path) -> str:
                 h.update(f"{path}:<missing>\n".encode())
     else:
         for f in sorted(_walk_files(root)):
+            if f.relative_to(root).as_posix() in skip:
+                continue
             try:
                 s = f.stat()
             except OSError:
                 continue
             h.update(f"{f.relative_to(root).as_posix()}:{s.st_size}:{s.st_mtime_ns}\n".encode())
     return h.hexdigest()
+
+
+# --------------------------------------------------------------------------- lições
+
+def lessons_rel(cfg: dict) -> str | None:
+    les = cfg.get("lessons") or {}
+    return norm_rel(les.get("file", "docs/lessons.md")) if les.get("enabled", True) else None
+
+
+def evidence_line(output: str) -> str:
+    """Linha mais informativa do log: erro concreto, não separadores nem resumos."""
+    lines = [ln.strip() for ln in output.splitlines() if ln.strip()]
+    lines = [ln for ln in lines if len(set(ln) - set("=-_*#~ ")) > 3]
+    prefs = [
+        r"^E\s+\S",                                  # pytest
+        r"\b\w*(Error|Exception)\b\s*:",             # TypeError: ..., AssertionError: ...
+        r"\berror\b.*:|\berror TS\d+",               # eslint / tsc
+        r"(AssertionError|assert |expected|Expected|toBe|toEqual)",
+        r"(DELETADO|ALTERADO|NOVO|TIMEOUT)",
+        r"\b(FAIL|FAILED|failed)\b",
+    ]
+    pick = None
+    for rx in prefs:
+        pick = next((ln for ln in lines if re.search(rx, ln)), None)
+        if pick:
+            break
+    pick = pick or (lines[-1] if lines else "(sem saída)")
+    pick = re.sub(r"^E\s+", "", pick).replace("`", "'")
+    return pick[:160]
+
+
+def append_lesson_stub(root: Path, cfg: dict, check: str, attempts: int, evidence: str) -> str | None:
+    rel = lessons_rel(cfg)
+    if not rel:
+        return None
+    p = root / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if not p.exists():
+        p.write_text(LESSONS_HEADER, encoding="utf-8")
+    day = _dt.date.today().isoformat()
+    line = (f"- {day} · [{check}] {attempts} falha(s) · evidência: `{evidence}` · "
+            f"lição: {LESSON_PENDING}\n")
+    with open(p, "a", encoding="utf-8") as f:
+        f.write(line)
+    return rel
+
+
+def read_lessons(root: Path, cfg: dict) -> list[dict]:
+    rel = lessons_rel(cfg)
+    if not rel or not (root / rel).is_file():
+        return []
+    out = []
+    rx = re.compile(r"^- (\S+) · \[([^\]]+)\] .*?lição: (.+)$")
+    for ln in (root / rel).read_text(encoding="utf-8", errors="ignore").splitlines():
+        m = rx.match(ln.strip())
+        if m:
+            out.append({"date": m.group(1), "check": m.group(2), "lesson": m.group(3).strip(),
+                        "pending": m.group(3).strip() == LESSON_PENDING})
+    return out
 
 
 # --------------------------------------------------------------------------- integridade
@@ -371,7 +452,8 @@ def run_checks(root: Path, cfg: dict, stream: bool = False) -> dict:
             "output": "\n".join(viol)}}
     passed = []
     env = dict(os.environ)
-    env.update({"CI": "1", "FORCE_COLOR": "0", "NO_COLOR": "1"})
+    # PYTHONDONTWRITEBYTECODE: evita bytecode velho quando o arquivo muda no mesmo segundo
+    env.update({"CI": "1", "FORCE_COLOR": "0", "NO_COLOR": "1", "PYTHONDONTWRITEBYTECODE": "1"})
     for item in cfg["verify"]:
         name, cmd = item["name"], item["cmd"]
         timeout = int(item.get("timeout_seconds", cfg["verify_timeout_seconds"]))
@@ -680,7 +762,7 @@ def hook_guard() -> int:
                                      "em arquivos novos.")
                     return 0
             scope = read_scope(root)
-            if scope and not any(path_matches(p, rel) for p in scope):
+            if scope and rel != lessons_rel(cfg) and not any(path_matches(p, rel) for p in scope):
                 _pretool("deny", f"'{rel}' está fora do escopo da tarefa (.harness/scope.txt: "
                                  f"{', '.join(scope)}).")
                 return 0
@@ -720,16 +802,37 @@ def hook_stop() -> int:
                                 "Responda ao agente para liberar a edição."})
         return 0
 
+    if st["lesson_requested"]:
+        st["lesson_requested"] = False  # pede uma única vez; nunca prende o agente em loop
+        save_state(root, st)
+        if fp == st["reference_fp"]:
+            return 0
+
     if not st["failing"] and fp == st["reference_fp"]:
         return 0  # nada mudou desde a última verificação aprovada
 
     res = run_checks(root, cfg)
     if res["ok"]:
+        recovered = st["failing"] and st.get("fail_log")
+        fail_log = st.get("fail_log") or {}
         st.update({"reference_fp": fingerprint(root), "failing": False, "attempts": 0,
-                   "last_error_sig": None, "same_error_count": 0,
+                   "last_error_sig": None, "same_error_count": 0, "fail_log": None,
                    "last_result": {"ok": True, "at": _now(), "passed": res["passed"]}})
-        save_state(root, st)
         names = ", ".join(res["passed"]) or "integridade"
+        rel = None
+        if recovered:
+            rel = append_lesson_stub(root, cfg, fail_log.get("check", "?"),
+                                     fail_log.get("count", 1), fail_log.get("evidence", "?"))
+        if rel:
+            st["lesson_requested"] = True
+            save_state(root, st)
+            _emit({"decision": "block", "reason": (
+                f"✅ Verificação aprovada ({names}) após {fail_log.get('count', 1)} falha(s). "
+                f"Antes de encerrar, registre a lição: em {rel}, substitua '{LESSON_PENDING}' na "
+                "última linha por UMA frase acionável que evitaria esse erro no futuro (causa → "
+                "regra). Não altere a evidência. Depois, encerre normalmente.")})
+            return 0
+        save_state(root, st)
         _emit({"systemMessage": f"✅ Harness: verificação aprovada ({names})."})
         return 0
 
@@ -739,6 +842,9 @@ def hook_stop() -> int:
     st["last_error_sig"] = sig
     st["attempts"] += 1
     st["failing"] = True
+    prev = st.get("fail_log") or {}
+    st["fail_log"] = {"check": failed["name"], "count": int(prev.get("count", 0)) + 1,
+                      "evidence": prev.get("evidence") or evidence_line(failed["output"])}
     st["last_result"] = {"ok": False, "at": _now(), "check": failed["name"], "code": failed["code"]}
     tail = _tail(failed["output"])
     escalate = (st["same_error_count"] >= cfg["escalate_after_same_error"]
@@ -801,6 +907,11 @@ def hook_session() -> int:
     ]
     if scope:
         lines.append(f"- Escopo da tarefa atual: {', '.join(scope)} (fora disso, edição bloqueada).")
+    n = int((cfg.get("lessons") or {}).get("inject_last", 5))
+    done = [x for x in read_lessons(root, cfg) if not x["pending"]][-n:] if n > 0 else []
+    if done:
+        lines.append("Lições de falhas anteriores neste projeto (evite repetir):")
+        lines += [f"  · [{x['check']}] {x['lesson'][:200]}" for x in done]
     if st["failing"]:
         lines.append("- ATENÇÃO: a última verificação falhou "
                      f"({(st.get('last_result') or {}).get('check', '?')}).")
@@ -908,44 +1019,30 @@ def suggest_test_paths(root: Path, info: dict) -> list[str]:
     return paths or ["tests/**"]
 
 
-CONTRACT_TEMPLATE = """# Contrato Operacional do Projeto
-
-> Lido pelo agente via `@HARNESS.md` no CLAUDE.md. As regras abaixo têm trava real:
-> hooks do plugin istofel-dev, `.claude/settings.json` e CI. Este arquivo é protegido:
-> só o usuário edita.
+CONTRACT_TEMPLATE = """# Contrato Operacional
 
 ## Entrega
-<!-- O que deve ser entregue nesta fase/feature. -->
 - (preencher)
 
 ## Critérios de Aceitação
-<!-- Verificáveis. Cada critério deve corresponder a um teste ou comando. -->
-- (preencher)
+- (preencher) — evidência: `comando ou teste`
 
-## Limites Operacionais
-- Escopo: modificar apenas arquivos exigidos pela tarefa atual{scope_hint}
-- Testes existentes ({test_paths}) nunca são alterados nem deletados (modo `{tests_mode}`)
-- Novas dependências exigem aprovação do usuário
-- Proibido: `rm -rf`, `git push --force`, `git reset --hard`, `sudo`, `--no-verify`
-- Protegidos (somente usuário): {protected}
+## Limites
+- (preencher: fora de escopo, ADRs e invariantes que o agente tentaria violar)
 
-## Mapa do Projeto
-<!-- Onde está cada coisa, para abrir só o necessário. -->
-- (preencher)
+## Ferramentas
+- (nenhum comando fora do padrão)
 
-## Protocolo de Verificação (executado automaticamente ao encerrar)
+## Protocolo de Verificação
 {verify_list}
 
-## Escalação de Falhas
-- Mesmo erro {same}x seguidas **ou** {max_attempts} tentativas → parar a edição autônoma
-- Imprimir o log exato, declarar a correção proposta e aguardar confirmação do usuário
+## Escalação
+- Mesmo erro {same}x **ou** {max_attempts} tentativas → parar, mostrar o log, propor a correção e aguardar
 """
 
 CLAUDE_IMPORT_BLOCK = """
-## Contrato operacional
+## Contrato
 @HARNESS.md
-- A verificação roda automaticamente ao encerrar; só declare sucesso após ela passar.
-- Para revisão independente antes de entregar, use o subagente `harness-reviewer`.
 """
 
 GITHUB_WORKFLOW = """name: harness
@@ -1077,10 +1174,7 @@ def cmd_init(a) -> int:
         vlist = "\n".join(f"{i}. {v['name']}: `{v['cmd']}`" for i, v in enumerate(verify, 1)) \
             or "1. (defina com --verify)"
         contract.write_text(CONTRACT_TEMPLATE.format(
-            scope_hint=" (`.harness/scope.txt` restringe por tarefa)",
-            test_paths=", ".join(test_paths), tests_mode=a.tests_mode,
-            protected=", ".join(cfg["protected_paths"]), verify_list=vlist,
-            same=a.same_error, max_attempts=a.max_attempts), encoding="utf-8")
+            verify_list=vlist, same=a.same_error, max_attempts=a.max_attempts), encoding="utf-8")
         created.append(CONTRACT_FILE)
 
     claude_md = root / "CLAUDE.md"
@@ -1115,6 +1209,11 @@ def cmd_init(a) -> int:
 
 
 # --------------------------------------------------------------------------- auditoria
+
+def _word_count(text: str) -> int:
+    text = re.sub(r"<!--.*?-->", " ", text, flags=re.S)
+    return len(re.findall(r"[\wÀ-ÿ@`./-]+", text))
+
 
 def _cmd_resolvable(root: Path, cmd: str, info: dict) -> tuple[bool, str]:
     toks = cmd.split()
@@ -1186,10 +1285,27 @@ def cmd_audit(a) -> int:
         gi = root / HARNESS_DIR / ".gitignore"
         add("médio", gi.is_file() and "state" in gi.read_text(), ".harness/state fora do Git",
             "crie .harness/.gitignore com a linha state/")
+    if cm.is_file():
+        ctext = cm.read_text(encoding="utf-8", errors="ignore")
+        words = _word_count(ctext)
+        add("médio", words <= 200, f"CLAUDE.md enxuto ({words} palavras; teto 200)",
+            "corte o que o agente descobre no código: árvore, stack, env vars, comandos padrão")
+        tree = bool(re.search(r"[├└]──", ctext))
+        add("médio", not tree, "CLAUDE.md sem árvore de diretórios (descobrível no código)",
+            "remova a árvore; aponte para docs/spec.md em uma linha")
     if contract.is_file():
         text = contract.read_text(encoding="utf-8", errors="ignore")
         add("médio", "(preencher)" not in text, "Contrato sem seções pendentes '(preencher)'",
-            "preencha Entrega, Critérios de Aceitação e Mapa")
+            "preencha Entrega, Critérios de Aceitação e Limites")
+        hw = _word_count(text)
+        add("médio", hw <= 300, f"HARNESS.md enxuto ({hw} palavras; teto 300 — é carregado em toda sessão)",
+            "mantenha só o que o agente erraria sem; regras genéricas já vêm do hook")
+        add("médio", bool(re.search(r"^##\s*Ferramentas", text, re.M | re.I)),
+            "Guia de ferramentas definido (seção 'Ferramentas', mesmo que vazia)",
+            "adicione '## Ferramentas' com comandos fora do padrão (ou '(nenhum comando fora do padrão)')")
+        mapa = bool(re.search(r"^##\s*Mapa", text, re.M | re.I)) or bool(re.search(r"[├└]──", text))
+        add("médio", not mapa, "HARNESS.md sem mapa/árvore do projeto (descobrível no código)",
+            "remova a seção Mapa; a SPEC já documenta a estrutura")
         secs = re.findall(r"##\s*Protocolo de Verifica[çc][ãa]o[^\n]*\n(.*?)(?=\n##\s|\Z)", text, re.S | re.I)
         if secs:
             vague = [ln.strip() for sec in secs for ln in sec.splitlines()
@@ -1204,6 +1320,18 @@ def cmd_audit(a) -> int:
             add("alto", not contra, "Contrato e config sem números contraditórios"
                 + ("" if not contra else f" — HARNESS.md cita {contra}, config usa {sorted(allowed)}"),
                 "alinhe os números no HARNESS.md com .harness/config.json")
+    if cfg and lessons_rel(cfg):
+        lessons = read_lessons(root, cfg)
+        pend = [x for x in lessons if x["pending"]]
+        add("médio", not pend, f"Lições registradas ({len(lessons)}; pendentes: {len(pend)})",
+            f"complete as lições '(pendente)' em {lessons_rel(cfg)}")
+        counts = {}
+        for x in lessons:
+            counts[x["check"]] = counts.get(x["check"], 0) + 1
+        rec = sorted(k for k, v in counts.items() if v >= 2)
+        add("baixo", not rec, "Nenhuma falha recorrente sem regra no CLAUDE.md"
+            + ("" if not rec else f" — recorrentes: {', '.join(rec)}"),
+            "promova a lição recorrente a uma linha em NUNCA/Regras Não Óbvias do CLAUDE.md")
     st = _read_json(root / ".claude" / "settings.json", {}) or {}
     deny = (st.get("permissions") or {}).get("deny", [])
     add("alto", any("rm -rf" in d for d in deny), "settings.json bloqueia rm -rf", "rode o init")
@@ -1266,7 +1394,7 @@ def cmd_verify(a) -> int:
         if not a.ci:
             st = load_state(root)
             st.update({"reference_fp": fingerprint(root), "failing": False, "attempts": 0,
-                       "same_error_count": 0, "last_error_sig": None,
+                       "same_error_count": 0, "last_error_sig": None, "fail_log": None,
                        "last_result": {"ok": True, "at": _now(), "passed": res["passed"]}})
             save_state(root, st)
         return 0
@@ -1308,7 +1436,8 @@ def cmd_reset(a) -> int:
     root = _root_or_die(a)
     st = load_state(root)
     st.update({"failing": False, "attempts": 0, "escalated": False, "escalation_notified": False,
-               "same_error_count": 0, "last_error_sig": None, "reference_fp": fingerprint(root)})
+               "same_error_count": 0, "last_error_sig": None, "reference_fp": fingerprint(root),
+               "fail_log": None, "lesson_requested": False})
     save_state(root, st)
     print("Estado do harness zerado.")
     return 0
