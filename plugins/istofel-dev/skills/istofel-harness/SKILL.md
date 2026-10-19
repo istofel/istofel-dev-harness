@@ -50,16 +50,22 @@ Escolher o modo pelo pedido: **Configurar** (padrão quando não existe `.harnes
    - CI no GitHub Actions (recomendado se o repositório estiver no GitHub)
    - Se nenhum comando de verificação foi detectado, perguntar qual comando roda os testes.
 
-4. **Escrever o HARNESS.md ANTES do init** (o init o protege em seguida). Estrutura obrigatória:
-   `Entrega` · `Critérios de Aceitação` · `Limites Operacionais` · `Mapa do Projeto` ·
-   `Protocolo de Verificação` · `Escalação de Falhas`. Regras de qualidade:
+4. **Escrever o HARNESS.md ANTES do init** (o init o protege em seguida). Ele é importado no
+   CLAUDE.md e carregado em toda sessão, então vale o teste de cada linha: **o agente erraria sem
+   ela, mesmo podendo ler o código e `docs/`?** Se não, cortar. Seções, nesta ordem:
+   `Entrega` · `Critérios de Aceitação` · `Limites` · `Ferramentas` · `Protocolo de Verificação` · `Escalação`.
    - Cada critério de aceitação é verificável e aponta o teste/comando que o comprova.
+   - **Limites:** só o específico do projeto (fora de escopo, ADRs, invariantes). As regras genéricas
+     (testes protegidos, comandos proibidos, dependências) já são impostas e injetadas pelo hook.
+   - **Ferramentas (guia de ferramentas):** só comandos e cuidados fora do padrão que o agente erraria,
+     como "subir `docker compose up -d db` antes dos testes" ou "rodar um teste: `pnpm vitest run <arq>`".
+     Não repetir o que já está no CLAUDE.md. Se não houver, manter `- (nenhum comando fora do padrão)`.
    - Cada etapa do Protocolo é um comando entre crases, idêntico ao `--verify`. Nada de
      "verifique se está correto": se não há comando, criar o script (ex.: `validate:schema`)
      ou registrar como pendência para o usuário.
-   - Os números da escalação são exatamente `--same-error` e `--max-attempts`.
-   - Mapa curto: só onde ficam código, testes, docs, schemas e decisões.
-   - Máximo ~60 linhas. Use o template em `references/harness-template.md`.
+   - Os números da Escalação são exatamente `--same-error` e `--max-attempts`.
+   - Proibido: mapa ou árvore de diretórios, tabela de stack, comandos padrão do ecossistema.
+   - Teto de ~300 palavras. Use o template em `references/harness-template.md`.
 
 5. **Rodar o init** (exemplo; ajuste aos dados reais):
    ```bash
@@ -108,6 +114,11 @@ Escolher o modo pelo pedido: **Configurar** (padrão quando não existe `.harnes
 - **Aprovar testes novos após revisá-los (usuário):** `python3 .harness/harness.py approve-tests`
 - **Ver estado:** `python3 .harness/harness.py status`
 - **Destravar após escalação:** basta o usuário responder no chat; ou `harness.py reset`.
+- **Lições:** quando uma verificação falha e depois passa, o hook grava a evidência em
+  `docs/lessons.md` e pede ao agente UMA frase de lição (causa → regra). Ao receber esse pedido,
+  substituir apenas o `(pendente)` da última linha e encerrar. As lições mais recentes são
+  injetadas no início de cada sessão. Quando o `audit` apontar uma falha recorrente, propor ao
+  usuário promovê-la a uma linha em `NUNCA` do CLAUDE.md (com o ID da lição como origem).
 - **Manutenção do contrato:** iniciar com `HARNESS_DISABLE=1 claude` (desliga os hooks só nessa sessão).
 - Comandos `init`, `approve-tests`, `scope` e `reset` são exclusivos do usuário: o guard os
   bloqueia quando o agente tenta. Não tentar contornar.

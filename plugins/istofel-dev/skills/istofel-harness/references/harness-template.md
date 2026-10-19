@@ -1,43 +1,37 @@
 # Template — HARNESS.md
 
-Substituir os colchetes. Manter as seis seções e a ordem. Máximo ~60 linhas.
+Carregado em toda sessão via `@HARNESS.md`. Teste de cada linha: o agente erraria sem ela?
+Teto ~300 palavras. Omitir itens sem dados reais; nunca inventar.
 
 ```markdown
-# Contrato Operacional do Projeto
-
-> Lido pelo agente via `@HARNESS.md` no CLAUDE.md. Travado por hooks do plugin istofel-dev,
-> `.claude/settings.json` e CI. Arquivo protegido: só o usuário edita.
+# Contrato Operacional
 
 ## Entrega
-- [o que esta fase/feature entrega, em 1–3 itens concretos]
+- [o que o passo atual entrega, em 1–3 itens concretos]
 
 ## Critérios de Aceitação
 - [critério verificável] — evidência: `[teste ou comando]`
-- [critério verificável] — evidência: `[teste ou comando]`
 
-## Limites Operacionais
-- Escopo: modificar apenas arquivos exigidos pela tarefa atual (`.harness/scope.txt` restringe por tarefa)
-- Testes existentes ([pastas de teste]) nunca são alterados nem deletados (modo `[append-only|locked]`)
-- Novas dependências exigem aprovação do usuário
-- Proibido: `rm -rf`, `git push --force`, `git reset --hard`, `sudo`, `--no-verify`
-- Protegidos (somente usuário): .harness/**, HARNESS.md, .claude/settings.json
-- [limites do domínio: invariantes, ADRs fechados, fora de escopo]
+## Limites
+- [fora de escopo / ADR / invariante que o agente tentaria violar] ([origem: PRD §x, ADR-y, INV-z])
 
-## Mapa do Projeto
-- `[pasta]`: [o que contém]
-- `docs/decisions.md`: log de decisões arquiteturais aceitas
+## Ferramentas
+- [comando ou cuidado fora do padrão, ex.: subir serviço antes dos testes]
+  (ou: "- (nenhum comando fora do padrão)")
 
-## Protocolo de Verificação (executado automaticamente ao encerrar)
+## Protocolo de Verificação
 1. [nome]: `[comando idêntico ao --verify]`
-2. [nome]: `[comando idêntico ao --verify]`
 
-## Escalação de Falhas
-- Mesmo erro [N]x seguidas **ou** [M] tentativas → parar a edição autônoma
-- Imprimir o log exato, declarar a correção proposta e aguardar confirmação do usuário
+## Escalação
+- Mesmo erro [N]x **ou** [M] tentativas → parar, mostrar o log, propor a correção e aguardar
 ```
+
+Não incluir (descobrível ou já imposto pelo hook): mapa/árvore de diretórios, stack, comandos padrão
+(`npm test`, `pytest`) fora do Protocolo, lista de arquivos protegidos, comandos proibidos genéricos.
 
 Checklist antes do init:
 - [ ] Todo critério tem evidência executável
 - [ ] Toda etapa do Protocolo está entre crases e é idêntica ao `--verify`
 - [ ] [N] = `--same-error` e [M] = `--max-attempts`
-- [ ] Nenhuma seção com "(preencher)"
+- [ ] Nada repetido do CLAUDE.md; nenhuma árvore ou tabela de stack
+- [ ] Nenhuma seção com "(preencher)"; até ~300 palavras

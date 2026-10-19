@@ -10,7 +10,8 @@
 | Dependências só com aprovação | Guard retorna `ask` para instalar pacotes ou editar manifestos | hook |
 | Escopo por tarefa | `.harness/scope.txt` (definido pelo usuário) limita Edit/Write | hook |
 | Verificação fora da máquina do agente | GitHub Actions roda `harness.py verify --ci` | `.github/workflows/harness.yml` |
-| Contrato lido em toda sessão | `@HARNESS.md` no CLAUDE.md + resumo injetado no `SessionStart` | init + hook |
+| Contrato lido em toda sessão | `@HARNESS.md` no CLAUDE.md (bloco de 2 linhas) + resumo injetado no `SessionStart` | init + hook |
+| Aprender com falhas | Falhou e depois passou → hook grava a evidência em `docs/lessons.md` e pede 1 lição; as últimas são injetadas no `SessionStart`; recorrentes viram `NUNCA` no CLAUDE.md | hook `Stop` + `SessionStart` + `audit` |
 
 ## Limites conhecidos (por isso existem várias camadas)
 
@@ -24,3 +25,5 @@
 - Com sandbox + modo append-only, comandos via Bash não escrevem em pastas de teste
   (ex.: snapshots novos do Vitest). Testes novos devem ser criados com a ferramenta Write.
 - `HARNESS_DISABLE=1` desliga os hooks na sessão: uso exclusivo do usuário para manutenção.
+- A lição é escrita pelo agente; o hook só garante a evidência e pede uma vez (sem loop).
+  A qualidade da lição depende de revisão humana ao promovê-la ao CLAUDE.md.
