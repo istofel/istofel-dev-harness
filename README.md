@@ -4,7 +4,7 @@
 
 <hr/>
 
-# Istofel Dev. Harness
+# istofel-dev-harness
 
 Plugin para o **Claude Code** que leva um projeto da ideia ao código verificado.
 O agente de IA trabalha sozinho, mas sob um **contrato com travas reais**: ele não consegue
@@ -25,7 +25,13 @@ declarar sucesso com testes falhando, apagar o que não deve nem "consertar" tes
 3. Instalar dependências exige a sua aprovação.
 4. Ao encerrar, os testes rodam sozinhos. Se falharem, o agente é obrigado a continuar.
 5. Se o mesmo erro se repetir 2 vezes, ou após 4 tentativas, o agente para, mostra o erro e espera você.
-6. O GitHub Actions repete a verificação fora da máquina do agente.
+6. **Aprende com os erros:** quando uma verificação falha e depois passa, a evidência vai para
+   `docs/lessons.md`, o agente escreve a lição e as lições recentes entram nas próximas sessões.
+7. O GitHub Actions repete a verificação fora da máquina do agente.
+
+**Contexto enxuto:** o `CLAUDE.md` e o `HARNESS.md` são lidos em toda sessão, então só contêm o que
+o agente não consegue descobrir no código. Nada de árvore de diretórios, stack ou comandos padrão,
+como recomenda o estudo da ETH Zürich ([Gloaguen et al., 2026](https://arxiv.org/abs/2602.11988)).
 
 ## Requisitos
 
@@ -68,11 +74,13 @@ Confira com `claude plugin list`. O item `istofel-dev@istofel` deve aparecer com
    A skill faz até 3 perguntas, escreve o `HARNESS.md` e instala as travas.
 3. **Salvar a configuração.**
    ```bash
-   git add HARNESS.md CLAUDE.md .harness .claude/settings.json .github
+   git add HARNESS.md CLAUDE.md .harness .claude/settings.json .github docs
    git commit -m "harness"
    ```
 4. **Reiniciar o Claude Code** e trabalhar normalmente.
 5. **Antes de entregar,** peça: *"faça uma revisão independente"*.
+6. **De tempos em tempos,** rode o `audit`. Quando ele apontar uma falha recorrente em
+   `docs/lessons.md`, transforme a lição numa linha `NUNCA` do `CLAUDE.md`.
 
 ### Comandos úteis (na raiz do projeto)
 
