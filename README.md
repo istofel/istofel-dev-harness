@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="docs/banner/istofel-dev.png" width="900px">
+    <img src="docs/banner/istofel-dev-v1.1.png" width="900px">
 </p>
 
 <hr/>
