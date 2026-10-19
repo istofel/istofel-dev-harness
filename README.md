@@ -4,7 +4,7 @@
 
 <hr/>
 
-# istofel-dev-harness
+# Istofel Dev. Harness
 
 Plugin para o **Claude Code** que leva um projeto da ideia ao código verificado.
 O agente de IA trabalha sozinho, mas sob um **contrato com travas reais**: ele não consegue
