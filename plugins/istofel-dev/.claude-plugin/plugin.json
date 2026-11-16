@@ -1,6 +1,6 @@
 {
   "name": "istofel-dev",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Do planejamento à execução verificada: istofel-project-plan (MVP → PRD → SPEC → CLAUDE.md) + istofel-harness (contrato executável com travas, verificação obrigatória, escalação e revisor independente).",
   "author": {
     "name": "Vinícius Istofel Oliveira"

@@ -11,7 +11,7 @@
 | Escopo por tarefa | `.harness/scope.txt` (definido pelo usuário) limita Edit/Write | hook |
 | Verificação fora da máquina do agente | GitHub Actions roda `harness.py verify --ci` | `.github/workflows/harness.yml` |
 | Contrato lido em toda sessão | `@HARNESS.md` no CLAUDE.md (bloco de 2 linhas) + resumo injetado no `SessionStart` | init + hook |
-| Aprender com falhas | Falhou e depois passou → hook grava a evidência em `docs/lessons.md` e pede 1 lição; as últimas são injetadas no `SessionStart`; recorrentes viram `NUNCA` no CLAUDE.md | hook `Stop` + `SessionStart` + `audit` |
+| Aprender com falhas | Falhou e depois passou → hook grava evidência e arquivos em `docs/lessons.md` e pede 1 lição `quando <sinal> → <regra>`; a lição volta só quando o sinal reaparece (mesmo check na falha, arquivos no escopo) ou, sem sinal, entre as mais recentes; recorrentes viram `NUNCA` no CLAUDE.md | hook `Stop` + `SessionStart` + `audit` |
 
 ## Limites conhecidos (por isso existem várias camadas)
 

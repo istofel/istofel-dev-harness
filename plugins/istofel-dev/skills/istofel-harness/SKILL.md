@@ -114,10 +114,11 @@ Escolher o modo pelo pedido: **Configurar** (padrão quando não existe `.harnes
 - **Aprovar testes novos após revisá-los (usuário):** `python3 .harness/harness.py approve-tests`
 - **Ver estado:** `python3 .harness/harness.py status`
 - **Destravar após escalação:** basta o usuário responder no chat; ou `harness.py reset`.
-- **Lições:** quando uma verificação falha e depois passa, o hook grava a evidência em
-  `docs/lessons.md` e pede ao agente UMA frase de lição (causa → regra). Ao receber esse pedido,
-  substituir apenas o `(pendente)` da última linha e encerrar. As lições mais recentes são
-  injetadas no início de cada sessão. Quando o `audit` apontar uma falha recorrente, propor ao
+- **Lições:** quando uma verificação falha e depois passa, o hook grava em `docs/lessons.md` a
+  evidência e os arquivos envolvidos, e pede ao agente UMA frase no formato
+  `quando <sinal observável> → <regra>`. Ao receber esse pedido, substituir apenas o `(pendente)`
+  da última linha e encerrar. As lições são injetadas pelo sinal: numa falha, as do mesmo check;
+  com `scope` ativo, as dos arquivos do escopo (nenhuma, se nada casar); sem sinal, as mais recentes. Quando o `audit` apontar uma falha recorrente, propor ao
   usuário promovê-la a uma linha em `NUNCA` do CLAUDE.md (com o ID da lição como origem).
 - **Manutenção do contrato:** iniciar com `HARNESS_DISABLE=1 claude` (desliga os hooks só nessa sessão).
 - Comandos `init`, `approve-tests`, `scope` e `reset` são exclusivos do usuário: o guard os

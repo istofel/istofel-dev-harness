@@ -25,8 +25,9 @@ declarar sucesso com testes falhando, apagar o que não deve nem "consertar" tes
 3. Instalar dependências exige a sua aprovação.
 4. Ao encerrar, os testes rodam sozinhos. Se falharem, o agente é obrigado a continuar.
 5. Se o mesmo erro se repetir 2 vezes, ou após 4 tentativas, o agente para, mostra o erro e espera você.
-6. **Aprende com os erros:** quando uma verificação falha e depois passa, a evidência vai para
-   `docs/lessons.md`, o agente escreve a lição e as lições recentes entram nas próximas sessões.
+6. **Aprende com os erros:** quando uma verificação falha e depois passa, a evidência e os arquivos
+   vão para `docs/lessons.md` e o agente escreve a lição como `quando <sinal> → <regra>`. A lição
+   volta quando o sinal reaparece: na mesma falha, ou ao trabalhar nos mesmos arquivos.
 7. O GitHub Actions repete a verificação fora da máquina do agente.
 
 **Contexto enxuto:** o `CLAUDE.md` e o `HARNESS.md` são lidos em toda sessão, então só contêm o que

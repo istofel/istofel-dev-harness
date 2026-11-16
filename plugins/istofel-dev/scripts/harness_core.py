@@ -27,7 +27,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 HARNESS_DIR = ".harness"
 CONFIG_FILE = "config.json"
 BASELINE_FILE = "baseline.json"
@@ -310,6 +310,24 @@ def list_test_files(root: Path, test_paths: list[str]) -> list[str]:
     return sorted(out)
 
 
+def changed_paths(root: Path) -> list[str]:
+    """Arquivos alterados em relação ao HEAD (git status), sem o estado do harness."""
+    st = subprocess.run(["git", "status", "--porcelain=v1", "-uall", "-z"], cwd=root,
+                        capture_output=True, timeout=30).stdout
+    entries = [e for e in st.decode("utf-8", "replace").split("\0") if e]
+    paths = set()
+    skip_next = False
+    for e in entries:
+        if skip_next:
+            skip_next = False
+            continue
+        code, path = e[:2], e[3:]
+        if code.startswith("R") or code.startswith("C"):
+            skip_next = True
+        paths.add(path)
+    return sorted(p for p in paths if not p.startswith(HARNESS_DIR + "/" + STATE_DIR))
+
+
 def fingerprint(root: Path) -> str:
     h = hashlib.sha256()
     skip = set()
@@ -321,21 +339,8 @@ def fingerprint(root: Path) -> str:
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True,
                               text=True, timeout=10).stdout.strip()
         h.update(("HEAD:" + head + "\n").encode())
-        st = subprocess.run(["git", "status", "--porcelain=v1", "-uall", "-z"], cwd=root,
-                            capture_output=True, timeout=30).stdout
-        entries = [e for e in st.decode("utf-8", "replace").split("\0") if e]
-        paths = set()
-        skip_next = False
-        for e in entries:
-            if skip_next:
-                skip_next = False
-                continue
-            code, path = e[:2], e[3:]
-            if code.startswith("R") or code.startswith("C"):
-                skip_next = True
-            paths.add(path)
-        for path in sorted(paths):
-            if path.startswith(HARNESS_DIR + "/" + STATE_DIR) or path in skip:
+        for path in changed_paths(root):
+            if path in skip:
                 continue
             fp = root / path
             if fp.is_file():
@@ -383,7 +388,8 @@ def evidence_line(output: str) -> str:
     return pick[:160]
 
 
-def append_lesson_stub(root: Path, cfg: dict, check: str, attempts: int, evidence: str) -> str | None:
+def append_lesson_stub(root: Path, cfg: dict, check: str, attempts: int, evidence: str,
+                       files: list[str] | None = None) -> str | None:
     rel = lessons_rel(cfg)
     if not rel:
         return None
@@ -392,8 +398,10 @@ def append_lesson_stub(root: Path, cfg: dict, check: str, attempts: int, evidenc
     if not p.exists():
         p.write_text(LESSONS_HEADER, encoding="utf-8")
     day = _dt.date.today().isoformat()
+    files = [f for f in (files or []) if f != rel and "," not in f and "`" not in f][:8]
+    where = f"arquivos: `{','.join(files)}` · " if files else ""
     line = (f"- {day} · [{check}] {attempts} falha(s) · evidência: `{evidence}` · "
-            f"lição: {LESSON_PENDING}\n")
+            f"{where}lição: {LESSON_PENDING}\n")
     with open(p, "a", encoding="utf-8") as f:
         f.write(line)
     return rel
@@ -405,12 +413,32 @@ def read_lessons(root: Path, cfg: dict) -> list[dict]:
         return []
     out = []
     rx = re.compile(r"^- (\S+) · \[([^\]]+)\] .*?lição: (.+)$")
+    rx_files = re.compile(r"· arquivos: `([^`]*)` ·")
     for ln in (root / rel).read_text(encoding="utf-8", errors="ignore").splitlines():
         m = rx.match(ln.strip())
         if m:
+            mf = rx_files.search(ln)
             out.append({"date": m.group(1), "check": m.group(2), "lesson": m.group(3).strip(),
-                        "pending": m.group(3).strip() == LESSON_PENDING})
+                        "pending": m.group(3).strip() == LESSON_PENDING,
+                        "files": [f for f in mf.group(1).split(",") if f] if mf else []})
     return out
+
+
+def relevant_lessons(lessons: list[dict], n: int, check: str | None = None,
+                     scope: list[str] | None = None) -> list[dict]:
+    """Escolhe lições pelo sinal observável (falha atual > escopo); sem sinal, as mais recentes."""
+    done = [x for x in lessons if not x["pending"]]
+    if n <= 0:
+        return []
+    if check:
+        return [x for x in done if x["check"] == check][-n:]
+    if scope:
+        return [x for x in done if any(path_matches(p, f) for p in scope for f in x["files"])][-n:]
+    return done[-n:]
+
+
+def _lessons_block(lessons: list[dict], title: str) -> list[str]:
+    return [title] + [f"  · [{x['check']}] {x['lesson'][:200]}" for x in lessons] if lessons else []
 
 
 # --------------------------------------------------------------------------- integridade
@@ -821,16 +849,19 @@ def hook_stop() -> int:
         names = ", ".join(res["passed"]) or "integridade"
         rel = None
         if recovered:
+            files = sorted(set(fail_log.get("files") or [])
+                           | set(changed_paths(root) if _is_git(root) else []))
             rel = append_lesson_stub(root, cfg, fail_log.get("check", "?"),
-                                     fail_log.get("count", 1), fail_log.get("evidence", "?"))
+                                     fail_log.get("count", 1), fail_log.get("evidence", "?"), files)
         if rel:
             st["lesson_requested"] = True
             save_state(root, st)
             _emit({"decision": "block", "reason": (
                 f"✅ Verificação aprovada ({names}) após {fail_log.get('count', 1)} falha(s). "
                 f"Antes de encerrar, registre a lição: em {rel}, substitua '{LESSON_PENDING}' na "
-                "última linha por UMA frase acionável que evitaria esse erro no futuro (causa → "
-                "regra). Não altere a evidência. Depois, encerre normalmente.")})
+                "última linha por UMA frase no formato 'quando <sinal observável: erro, arquivo "
+                "ou situação> → <regra>', que evitaria esse erro no futuro. Não altere a "
+                "evidência nem os arquivos. Depois, encerre normalmente.")})
             return 0
         save_state(root, st)
         _emit({"systemMessage": f"✅ Harness: verificação aprovada ({names})."})
@@ -843,10 +874,17 @@ def hook_stop() -> int:
     st["attempts"] += 1
     st["failing"] = True
     prev = st.get("fail_log") or {}
+    files = set(prev.get("files") or []) | set(changed_paths(root) if _is_git(root) else [])
     st["fail_log"] = {"check": failed["name"], "count": int(prev.get("count", 0)) + 1,
-                      "evidence": prev.get("evidence") or evidence_line(failed["output"])}
+                      "evidence": prev.get("evidence") or evidence_line(failed["output"]),
+                      "files": sorted(files)[:20]}
     st["last_result"] = {"ok": False, "at": _now(), "check": failed["name"], "code": failed["code"]}
     tail = _tail(failed["output"])
+    n = int((cfg.get("lessons") or {}).get("inject_last", 5))
+    past = _lessons_block(relevant_lessons(read_lessons(root, cfg), min(n, 3), check=failed["name"]),
+                          f"Lições anteriores para '{failed['name']}' (confira se se aplicam):")
+    if past:
+        tail += "\n\n" + "\n".join(past)
     escalate = (st["same_error_count"] >= cfg["escalate_after_same_error"]
                 or st["attempts"] >= cfg["max_attempts"])
     if escalate:
@@ -908,10 +946,9 @@ def hook_session() -> int:
     if scope:
         lines.append(f"- Escopo da tarefa atual: {', '.join(scope)} (fora disso, edição bloqueada).")
     n = int((cfg.get("lessons") or {}).get("inject_last", 5))
-    done = [x for x in read_lessons(root, cfg) if not x["pending"]][-n:] if n > 0 else []
-    if done:
-        lines.append("Lições de falhas anteriores neste projeto (evite repetir):")
-        lines += [f"  · [{x['check']}] {x['lesson'][:200]}" for x in done]
+    check = (st.get("last_result") or {}).get("check") if st["failing"] else None
+    lines += _lessons_block(relevant_lessons(read_lessons(root, cfg), n, check=check, scope=scope),
+                            "Lições de falhas anteriores relevantes agora (evite repetir):")
     if st["failing"]:
         lines.append("- ATENÇÃO: a última verificação falhou "
                      f"({(st.get('last_result') or {}).get('check', '?')}).")
